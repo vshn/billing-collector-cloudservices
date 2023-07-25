@@ -175,3 +175,20 @@ func (ss DBaaSSourceString) GetQuery() string {
 func (ss DBaaSSourceString) GetSourceString() string {
 	return strings.Join([]string{ss.Query, ss.Organization, ss.Namespace, ss.Plan}, ":")
 }
+
+func (ss DBaaSSourceString) GetCategoryString() string {
+	return Provider + ":" + ss.Namespace
+}
+
+type SOSSourceString struct {
+	Namespace    string
+	Organization string
+}
+
+func (ss SOSSourceString) GetSourceString() string {
+	return string(SosType) + ":" + Provider + ":" + ss.Organization + ":" + ss.Namespace
+}
+
+func (ss SOSSourceString) GetCategoryString() string {
+	return Provider + ":" + ss.Namespace
+}

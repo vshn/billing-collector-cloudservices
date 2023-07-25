@@ -1,11 +1,5 @@
 package cloudscale
 
-import (
-	"database/sql"
-
-	"github.com/appuio/appuio-cloud-reporting/pkg/db"
-)
-
 const (
 	// source format: 'query:zone:tenant:namespace' or 'query:zone:tenant:namespace:class'
 	// We do not have real (prometheus) queries here, just random hardcoded strings.
@@ -20,79 +14,8 @@ var (
 	sourceZones = []string{"cloudscale"}
 )
 
-var (
-	ensureProducts = []*db.Product{
-		{
-			Source: sourceQueryStorage + ":" + sourceZones[0],
-			Target: sql.NullString{String: "1401", Valid: true},
-			Amount: 0.0033,  // this is per DAY, equals 0.099 per GB per month
-			Unit:   "GBDay", // SI GB according to cloudscale
-			During: db.InfiniteRange(),
-		},
-		{
-			Source: sourceQueryTrafficOut + ":" + sourceZones[0],
-			Target: sql.NullString{String: "1403", Valid: true},
-			Amount: 0.022,
-			Unit:   "GB", // SI GB according to cloudscale
-			During: db.InfiniteRange(),
-		},
-		{
-			Source: sourceQueryRequests + ":" + sourceZones[0],
-			Target: sql.NullString{String: "1405", Valid: true},
-			Amount: 0.0055,
-			Unit:   "KReq",
-			During: db.InfiniteRange(),
-		},
-	}
-)
-var (
-	ensureDiscounts = []*db.Discount{
-		{
-			Source:   sourceQueryStorage,
-			Discount: 0,
-			During:   db.InfiniteRange(),
-		},
-		{
-			Source:   sourceQueryTrafficOut,
-			Discount: 0,
-			During:   db.InfiniteRange(),
-		},
-		{
-			Source:   sourceQueryRequests,
-			Discount: 0,
-			During:   db.InfiniteRange(),
-		},
-	}
-)
-
 var units = map[string]string{
 	sourceQueryStorage:    "GBDay",
 	sourceQueryTrafficOut: "GB",
 	sourceQueryRequests:   "KReq",
 }
-
-var (
-	ensureQueries = []*db.Query{
-		{
-			Name:        sourceQueryStorage + ":" + sourceZones[0],
-			Description: "Object Storage - Storage (cloudscale.ch)",
-			Query:       "",
-			Unit:        units[sourceQueryStorage],
-			During:      db.InfiniteRange(),
-		},
-		{
-			Name:        sourceQueryTrafficOut + ":" + sourceZones[0],
-			Description: "Object Storage - Traffic Out (cloudscale.ch)",
-			Query:       "",
-			Unit:        units[sourceQueryTrafficOut],
-			During:      db.InfiniteRange(),
-		},
-		{
-			Name:        sourceQueryRequests + ":" + sourceZones[0],
-			Description: "Object Storage - Requests (cloudscale.ch)",
-			Query:       "",
-			Unit:        units[sourceQueryRequests],
-			During:      db.InfiniteRange(),
-		},
-	}
-)

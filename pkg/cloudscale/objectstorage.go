@@ -3,99 +3,29 @@ package cloudscale
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/cloudscale-ch/cloudscale-go-sdk/v2"
-	"github.com/vshn/billing-collector-cloudservices/pkg/reporting"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"github.com/vshn/billing-collector-cloudservices/pkg/prom"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ObjectStorage struct {
 	client      *cloudscale.Client
 	k8sClient   client.Client
-	date        time.Time
-	databaseURL string
+	orgOverride string
 }
 
-func NewObjectStorage(client *cloudscale.Client, k8sClient client.Client, databaseURL string, billingDate time.Time) (*ObjectStorage, error) {
+func NewObjectStorage(client *cloudscale.Client, k8sClient client.Client, orgOverride string) (*ObjectStorage, error) {
 	return &ObjectStorage{
 		client:      client,
 		k8sClient:   k8sClient,
-		date:        billingDate,
-		databaseURL: databaseURL,
+		orgOverride: orgOverride,
 	}, nil
 }
 
-func (obj *ObjectStorage) Execute(ctx context.Context) error {
-	logger := ctrl.LoggerFrom(ctx)
-	s, err := reporting.NewStore(obj.databaseURL, logger.WithName("reporting-store"))
-	if err != nil {
-		return fmt.Errorf("reporting.NewStore: %w", err)
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			logger.Error(err, "unable to close")
-		}
-	}()
-
-	if err := obj.initialize(ctx, s); err != nil {
-		return err
-	}
-	accumulated, err := obj.accumulate(ctx)
-	if err != nil {
-		return err
-	}
-	return obj.save(ctx, s, accumulated)
-}
-
-func (obj *ObjectStorage) initialize(ctx context.Context, s *reporting.Store) error {
-	logger := ctrl.LoggerFrom(ctx)
-	if err := s.Initialize(ctx, ensureProducts, ensureDiscounts, ensureQueries); err != nil {
-		return fmt.Errorf("initialize: %w", err)
-	}
-	logger.Info("initialized reporting db")
-	return nil
-}
-
-func (obj *ObjectStorage) accumulate(ctx context.Context) (map[AccumulateKey]uint64, error) {
-	return accumulateBucketMetrics(ctx, obj.date, obj.client, obj.k8sClient)
-}
-
-func (obj *ObjectStorage) save(ctx context.Context, s *reporting.Store, accumulated map[AccumulateKey]uint64) error {
-	logger := ctrl.LoggerFrom(ctx)
-
-	for source, value := range accumulated {
-		logger := logger.WithValues("source", source)
-		if value == 0 {
-			logger.V(1).Info("skipping zero valued entry")
-			continue
-		}
-		logger.Info("accumulating source")
-
-		quantity, err := convertUnit(units[source.Query], value)
-		if err != nil {
-			logger.Error(err, "convertUnit failed, skip entry", "unit", units[source.Query], value)
-			continue
-		}
-
-		err = s.WriteRecord(ctx, reporting.Record{
-			TenantSource:   source.Tenant,
-			CategorySource: source.Zone + ":" + source.Namespace,
-			BillingDate:    source.Start,
-			ProductSource:  source.String(),
-			DiscountSource: source.String(),
-			QueryName:      source.Query + ":" + source.Zone,
-			Value:          quantity,
-		})
-		if err != nil {
-			logger.Error(err, "writeRecord failed, skip entry")
-			continue
-		}
-	}
-
-	return nil
+func (obj *ObjectStorage) Accumulate(ctx context.Context, date time.Time) (map[AccumulateKey]uint64, error) {
+	return accumulateBucketMetrics(ctx, date, obj.client, obj.k8sClient, obj.orgOverride)
 }
 
 func convertUnit(unit string, value uint64) (float64, error) {
@@ -106,4 +36,20 @@ func convertUnit(unit string, value uint64) (float64, error) {
 		return float64(value) / 1000, nil
 	}
 	return 0, errors.New("Unknown query unit " + unit)
+}
+
+func Export(metrics map[AccumulateKey]uint64, billingHour int) error {
+	prom.ResetAppCatMetric()
+
+	billingParts := 24 - billingHour
+
+	for k, v := range metrics {
+		value, err := convertUnit(units[k.Query], v)
+		if err != nil {
+			return err
+		}
+		value = value / float64(billingParts)
+		prom.UpdateAppCatMetric(value, k.GetCategoryString(), k.GetSourceString(), "objectStorage")
+	}
+	return nil
 }

@@ -3,16 +3,16 @@ package exoscale
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
 
-	"github.com/appuio/appuio-cloud-reporting/pkg/db"
 	egoscale "github.com/exoscale/egoscale/v2"
 	"github.com/vshn/billing-collector-cloudservices/pkg/exofixtures"
-	"github.com/vshn/billing-collector-cloudservices/pkg/reporting"
+	"github.com/vshn/billing-collector-cloudservices/pkg/kubernetes"
+	"github.com/vshn/billing-collector-cloudservices/pkg/log"
+	"github.com/vshn/billing-collector-cloudservices/pkg/prom"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
 	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -55,57 +55,19 @@ type Detail struct {
 type DBaaS struct {
 	exoscaleClient *egoscale.Client
 	k8sClient      k8s.Client
-	databaseURL    string
-	billingDate    time.Time
+	orgOverride    string
 }
 
 // NewDBaaS creates a Service with the initial setup
-func NewDBaaS(exoscaleClient *egoscale.Client, k8sClient k8s.Client, databaseURL string, billingDate time.Time) (*DBaaS, error) {
+func NewDBaaS(exoscaleClient *egoscale.Client, k8sClient k8s.Client, orgOverride string) (*DBaaS, error) {
 	return &DBaaS{
 		exoscaleClient: exoscaleClient,
 		k8sClient:      k8sClient,
-		databaseURL:    databaseURL,
-		billingDate:    billingDate,
+		orgOverride:    orgOverride,
 	}, nil
 }
 
-// Execute executes the main business logic for this application by gathering, matching and saving data to the database
-func (ds *DBaaS) Execute(ctx context.Context) error {
-	logger := ctrl.LoggerFrom(ctx)
-
-	s, err := reporting.NewStore(ds.databaseURL, logger.WithName("reporting-store"))
-	if err != nil {
-		return fmt.Errorf("reporting.NewStore: %w", err)
-	}
-	defer func() {
-		if err := s.Close(); err != nil {
-			logger.Error(err, "unable to close")
-		}
-	}()
-
-	if err := ds.initialize(ctx, s); err != nil {
-		return err
-	}
-	accumulated, err := ds.accumulate(ctx)
-	if err != nil {
-		return err
-	}
-	return ds.save(ctx, s, accumulated)
-}
-
-func (ds *DBaaS) initialize(ctx context.Context, s *reporting.Store) error {
-	logger := ctrl.LoggerFrom(ctx)
-
-	for t, fixtures := range exofixtures.DBaaS {
-		if err := s.Initialize(ctx, fixtures.Products, []*db.Discount{&fixtures.Discount}, []*db.Query{&fixtures.Query}); err != nil {
-			return fmt.Errorf("initialize(%q): %w", t, err)
-		}
-	}
-	logger.Info("initialized reporting db")
-	return nil
-}
-
-func (ds *DBaaS) accumulate(ctx context.Context) (map[Key]Aggregated, error) {
+func (ds *DBaaS) Accumulate(ctx context.Context) (map[Key]Aggregated, error) {
 	detail, err := ds.fetchManagedDBaaSAndNamespaces(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetchManagedDBaaSAndNamespaces: %w", err)
@@ -119,28 +81,12 @@ func (ds *DBaaS) accumulate(ctx context.Context) (map[Key]Aggregated, error) {
 	return aggregateDBaaS(ctx, usage, detail), nil
 }
 
-func (ds *DBaaS) save(ctx context.Context, s *reporting.Store, aggregatedObjects map[Key]Aggregated) error {
-	logger := ctrl.LoggerFrom(ctx)
-	if len(aggregatedObjects) == 0 {
-		logger.Info("there are no DBaaS instances to be saved in the database")
-		return nil
-	}
-	for _, aggregated := range aggregatedObjects {
-		err := ds.ensureAggregatedServiceUsage(ctx, aggregated, s)
-		if err != nil {
-			logger.Error(err, "Cannot save aggregated DBaaS service record to billing database")
-			continue
-		}
-	}
-	return nil
-}
-
 // fetchManagedDBaaSAndNamespaces fetches instances and namespaces from kubernetes cluster
 func (ds *DBaaS) fetchManagedDBaaSAndNamespaces(ctx context.Context) ([]Detail, error) {
-	logger := ctrl.LoggerFrom(ctx)
+	logger := log.Logger(ctx)
 
 	logger.V(1).Info("Listing namespaces from cluster")
-	namespaces, err := fetchNamespaceWithOrganizationMap(ctx, ds.k8sClient)
+	namespaces, err := kubernetes.FetchNamespaceWithOrganizationMap(ctx, ds.k8sClient, ds.orgOverride)
 	if err != nil {
 		return nil, fmt.Errorf("cannot list namespaces: %w", err)
 	}
@@ -170,7 +116,7 @@ func (ds *DBaaS) fetchManagedDBaaSAndNamespaces(ctx context.Context) ([]Detail, 
 }
 
 func findDBaaSDetailInNamespacesMap(ctx context.Context, resource metav1.PartialObjectMetadata, gvk schema.GroupVersionKind, namespaces map[string]string) *Detail {
-	logger := ctrl.LoggerFrom(ctx).WithValues("dbaas", resource.GetName())
+	logger := log.Logger(ctx).WithValues("dbaas", resource.GetName())
 
 	namespace, exist := resource.GetLabels()[namespaceLabel]
 	if !exist {
@@ -199,7 +145,7 @@ func findDBaaSDetailInNamespacesMap(ctx context.Context, resource metav1.Partial
 
 // fetchDBaaSUsage gets DBaaS service usage from Exoscale
 func (ds *DBaaS) fetchDBaaSUsage(ctx context.Context) ([]*egoscale.DatabaseService, error) {
-	logger := ctrl.LoggerFrom(ctx)
+	logger := log.Logger(ctx)
 	logger.Info("Fetching DBaaS usage from Exoscale")
 
 	var databaseServices []*egoscale.DatabaseService
@@ -216,7 +162,7 @@ func (ds *DBaaS) fetchDBaaSUsage(ctx context.Context) ([]*egoscale.DatabaseServi
 
 // aggregateDBaaS aggregates DBaaS services by namespaces and plan
 func aggregateDBaaS(ctx context.Context, exoscaleDBaaS []*egoscale.DatabaseService, dbaasDetails []Detail) map[Key]Aggregated {
-	logger := ctrl.LoggerFrom(ctx)
+	logger := log.Logger(ctx)
 	logger.Info("Aggregating DBaaS instances by namespace and plan")
 
 	// The DBaaS names are unique across DB types in an Exoscale organization.
@@ -235,7 +181,12 @@ func aggregateDBaaS(ctx context.Context, exoscaleDBaaS []*egoscale.DatabaseServi
 			key := NewKey(dbaasDetail.Namespace, *dbaasUsage.Plan, *dbaasUsage.Type)
 			aggregated := aggregatedDBaasS[key]
 			aggregated.Key = key
-			aggregated.Organization = dbaasDetail.Organization
+			aggregated.Source = &exofixtures.DBaaSSourceString{
+				Organization: dbaasDetail.Organization,
+				Namespace:    dbaasDetail.Namespace,
+				Plan:         *dbaasUsage.Plan,
+				Query:        exofixtures.BillingTypes[*dbaasUsage.Type],
+			}
 			aggregated.Value++
 			aggregatedDBaasS[key] = aggregated
 		} else {
@@ -246,39 +197,16 @@ func aggregateDBaaS(ctx context.Context, exoscaleDBaaS []*egoscale.DatabaseServi
 	return aggregatedDBaasS
 }
 
-// ensureAggregatedServiceUsage saves the aggregated database service usage by namespace and plan to the billing database
-// To save the correct data to the database the function also matches a relevant product, Discount (if any) and Query.
-func (ds *DBaaS) ensureAggregatedServiceUsage(ctx context.Context, aggregatedDatabaseService Aggregated, s *reporting.Store) error {
-	logger := ctrl.LoggerFrom(ctx)
+func Export(accumulated map[Key]Aggregated) error {
 
-	tokens, err := aggregatedDatabaseService.DecodeKey()
-	if err != nil {
-		return fmt.Errorf("cannot decode key namespace-plan-dbtype - %s, organization %s, number of instances %f: %w",
-			aggregatedDatabaseService.Key,
-			aggregatedDatabaseService.Organization,
-			aggregatedDatabaseService.Value,
-			err)
+	prom.ResetAppCatMetric()
+	for _, val := range accumulated {
+		prodType := "dbaas"
+		if strings.Contains(val.Source.GetSourceString(), "object") {
+			prodType = "objectstorage"
+		}
+		prom.UpdateAppCatMetric(val.Value, val.Source.GetCategoryString(), val.Source.GetSourceString(), prodType)
 	}
-	namespace := tokens[0]
-	plan := tokens[1]
-	dbType := tokens[2]
+	return nil
 
-	logger.Info("Saving DBaaS usage", "namespace", namespace, "plan", plan, "type", dbType, "quantity", aggregatedDatabaseService.Value)
-
-	sourceString := exofixtures.DBaaSSourceString{
-		Query:        exofixtures.BillingTypes[dbType],
-		Organization: aggregatedDatabaseService.Organization,
-		Namespace:    namespace,
-		Plan:         plan,
-	}
-
-	return s.WriteRecord(ctx, reporting.Record{
-		TenantSource:   aggregatedDatabaseService.Organization,
-		CategorySource: exofixtures.Provider + ":" + namespace,
-		BillingDate:    ds.billingDate,
-		ProductSource:  sourceString.GetSourceString(),
-		DiscountSource: sourceString.GetSourceString(),
-		QueryName:      sourceString.GetQuery(),
-		Value:          aggregatedDatabaseService.Value,
-	})
 }

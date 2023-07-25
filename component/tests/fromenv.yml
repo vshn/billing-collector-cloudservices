@@ -1,0 +1,25 @@
+applications:
+  - metrics-collector as cloudscale
+  - metrics-collector as exoscale
+parameters:
+  billing_collector_cloudservices:
+    appuioManaged: false
+    exoscale:
+      enabled: true
+      intervall: 10
+    cloudscale:
+      enabled: true
+      intervall: 10
+    images:
+      collector:
+        tag: latest
+    secrets:
+      cloudscale:
+        credentials:
+          stringData:
+            CLOUDSCALE_API_TOKEN: placeholder
+      exoscale:
+        credentials:
+          stringData:
+            EXOSCALE_API_KEY: placeholder
+            EXOSCALE_API_SECRET: placeholder

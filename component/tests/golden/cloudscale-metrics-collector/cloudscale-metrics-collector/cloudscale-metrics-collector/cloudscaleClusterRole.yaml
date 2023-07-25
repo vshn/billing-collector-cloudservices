@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations: {}
+  labels:
+    name: appcat-cloudcollector-cloudscale
+  name: appcat:cloudcollector:cloudscale
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - cloudscale.crossplane.io
+    resources:
+      - buckets
+    verbs:
+      - get
+      - list
+      - watch

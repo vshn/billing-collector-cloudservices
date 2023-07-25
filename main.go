@@ -68,6 +68,32 @@ func newApp() (context.Context, context.CancelFunc, *cli.App) {
 				DefaultText: "console",
 				Destination: &logFormat,
 			},
+			&cli.IntFlag{
+				Name:  "collectInterval",
+				Usage: "Interval in which the exporter checks the cloud resources",
+				Value: 10,
+			},
+			&cli.IntFlag{
+				Name:  "billingHour",
+				Usage: "After which hour every day the objectstorage collector should start",
+				Value: 6,
+				Action: func(c *cli.Context, i int) error {
+					if i > 23 || i < 0 {
+						return fmt.Errorf("invalid billingHour value, needs to be between 0 and 23")
+					}
+					return nil
+				},
+			},
+			&cli.StringFlag{
+				Name:  "organizationOverride",
+				Usage: "If the collector is collecting the metrics for an APPUiO managed instance. It needs to set the name of the customer.",
+				Value: "",
+			},
+			&cli.StringFlag{
+				Name:  "bind",
+				Usage: "Golang bind string. Will be used for the exporter",
+				Value: ":9123",
+			},
 		},
 		Before: func(c *cli.Context) error {
 			logger, err := log.NewLogger(appName, version, logLevel, logFormat)
@@ -75,12 +101,6 @@ func newApp() (context.Context, context.CancelFunc, *cli.App) {
 				return fmt.Errorf("before: %w", err)
 			}
 			c.Context = log.NewLoggingContext(c.Context, logger)
-			return nil
-		},
-		Action: func(c *cli.Context) error {
-			if true {
-				return cli.ShowAppHelp(c)
-			}
 			log.Logger(c.Context).WithValues(
 				"date", date,
 				"commit", commit,
@@ -90,6 +110,13 @@ func newApp() (context.Context, context.CancelFunc, *cli.App) {
 				"uid", os.Getuid(),
 				"gid", os.Getgid(),
 			).Info("Starting up " + appName)
+			return nil
+		},
+		Action: func(c *cli.Context) error {
+			if true {
+				return cli.ShowAppHelp(c)
+			}
+
 			return nil
 		},
 		Commands: []*cli.Command{

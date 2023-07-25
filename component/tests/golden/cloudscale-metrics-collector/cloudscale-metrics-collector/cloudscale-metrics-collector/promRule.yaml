@@ -1,0 +1,16 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  annotations: {}
+  labels:
+    name: appcat-cloud-billing
+  name: appcat-cloud-billing
+  namespace: appuio-cloud-reporting
+spec:
+  groups:
+    - name: appcat:billing:cloudservices
+      rules:
+        - expr: max_over_time(appcat:raw:billing{type="dbaas"}[1h])
+          record: appcat:billing
+        - expr: appcat:raw:billing{type!="dbaas"}
+          record: appcat:billing

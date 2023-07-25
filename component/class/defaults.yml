@@ -4,7 +4,6 @@ parameters:
       multi_instance: true
 
     namespace: appuio-cloud-reporting
-    database: {}
 
     secrets:
       exoscale:
@@ -12,38 +11,27 @@ parameters:
           stringData:
             EXOSCALE_API_KEY: "?{vaultkv:${cluster:tenant}/${cluster:name}/billing-collector-cloudservices/${_instance}/exoscale-key}"
             EXOSCALE_API_SECRET: "?{vaultkv:${cluster:tenant}/${cluster:name}/billing-collector-cloudservices/${_instance}/exoscale-secret}"
-            KUBERNETES_SERVER_URL: "?{vaultkv:${cluster:tenant}/${cluster:name}/billing-collector-cloudservices/${_instance}/cluster-server}"
-            KUBERNETES_SERVER_TOKEN: "?{vaultkv:${cluster:tenant}/${cluster:name}/billing-collector-cloudservices/${_instance}/cluster-token}"
       cloudscale:
         credentials:
           stringData:
             CLOUDSCALE_API_TOKEN: "?{vaultkv:${cluster:tenant}/${cluster:name}/billing-collector-cloudservices/${_instance}/token}"
-            KUBERNETES_SERVER_URL: "?{vaultkv:${cluster:tenant}/${cluster:name}/billing-collector-cloudservices/${_instance}/cluster-server}"
-            KUBERNETES_SERVER_TOKEN: "?{vaultkv:${cluster:tenant}/${cluster:name}/billing-collector-cloudservices/${_instance}/cluster-token}"
     images:
       collector:
         registry: 'ghcr.io'
         repository: 'vshn/billing-collector-cloudservices'
-        tag: v1.0.3
+        tag: change_exporter
+
+    appuioManaged: true
+    tenantID: ${cluster:tenant}
 
     exoscale:
       enabled: false
-      objectStorage:
-        enabled: true
-        # Times in UTC! Don't run job around midnight as exoscale API may return incomplete data
-        # schedule for objectstorage cronjob
-        # default: Every day at minute 10 past hour 10, 16 and 20.
-        schedule: '10 10,16,20 * * *'
-
-      dbaas:
-        # enable DBaaS cronjob in addition to objectstorage cronjob.
-        enabled: false
-        # schedule for DBaaS cronjob every 15min
-        schedule: '*/15 * * * *'
+      # Exoscale metrics are generally fast
+      # and we are less likely to miss and dbaas instances
+      intervall: 60
 
     cloudscale:
       enabled: false
-      objectStorage:
-        enabled: true
-        # Times in UTC!
-        schedule: '10 4,10,16 * * *'
+      # cloudscale.ch queries are rather slow.
+      # Also the metrics are fetched for the previous day, the won't change often.
+      intervall: 600

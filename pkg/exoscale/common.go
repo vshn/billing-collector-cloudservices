@@ -1,28 +1,25 @@
 package exoscale
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
-	k8s "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
-	// organizationLabel represents the label used for organization when fetching the metrics
-	organizationLabel = "appuio.io/organization"
 	// namespaceLabel represents the label used for namespace when fetching the metrics
 	namespaceLabel = "crossplane.io/claim-namespace"
 )
 
+type Sourcer interface {
+	GetSourceString() string
+	GetCategoryString() string
+}
+
 // Aggregated contains information needed to save the metrics of the different resource types in the database
 type Aggregated struct {
 	Key
-	Organization string
+	Source Sourcer
 	// Value represents the aggregate amount by Key of used service
 	Value float64
 }
@@ -58,32 +55,4 @@ func (k *Key) DecodeKey() (tokens []string, err error) {
 	}
 	s := strings.Split(string(decodedKey), ";")
 	return s, nil
-}
-
-func fetchNamespaceWithOrganizationMap(ctx context.Context, k8sClient k8s.Client) (map[string]string, error) {
-	logger := ctrl.LoggerFrom(ctx)
-
-	gvk := schema.GroupVersionKind{
-		Group:   "",
-		Version: "v1",
-		Kind:    "NamespaceList",
-	}
-	list := &metav1.PartialObjectMetadataList{}
-	list.SetGroupVersionKind(gvk)
-
-	err := k8sClient.List(ctx, list)
-	if err != nil {
-		return nil, fmt.Errorf("cannot get namespace list: %w", err)
-	}
-
-	namespaces := map[string]string{}
-	for _, ns := range list.Items {
-		org, ok := ns.GetLabels()[organizationLabel]
-		if !ok {
-			logger.Info("Organization label not found in namespace", "namespace", ns.GetName())
-			continue
-		}
-		namespaces[ns.GetName()] = org
-	}
-	return namespaces, nil
 }

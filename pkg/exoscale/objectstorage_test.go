@@ -1,13 +1,13 @@
 package exoscale
 
 import (
-	"context"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/exoscale/egoscale/v2/oapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/vshn/billing-collector-cloudservices/pkg/exofixtures"
+	"github.com/vshn/billing-collector-cloudservices/pkg/kubernetes"
 	exoscalev1 "github.com/vshn/provider-exoscale/apis/exoscale/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -38,9 +38,9 @@ func TestObjectStorage_GetAggregated(t *testing.T) {
 				createBucketDetail("no-metrics-bucket", "beta", "orgD"),
 			},
 			expectedAggregated: map[Key]Aggregated{
-				defaultKey: createAggregated(defaultKey, "orgA", 1),
-				alphaKey:   createAggregated(alphaKey, "orgB", 13),
-				omegaKey:   createAggregated(omegaKey, "orgC", 0),
+				defaultKey: createAggregated(defaultKey, "orgA", "default", 1),
+				alphaKey:   createAggregated(alphaKey, "orgB", "alpha", 13),
+				omegaKey:   createAggregated(omegaKey, "orgC", "omega", 0),
 			},
 		},
 		"GivenSosBucketsUsageAndBuckets_WhenMatch_ThenExpectNoAggregatedObjects": {
@@ -75,13 +75,13 @@ func TestObjectStorage_GetAggregated(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Given
-			ctx := context.Background()
+			ctx := getTestContext(t)
 
 			// When
-			aggregated := getAggregatedBuckets(ctx, tc.givenSosBucketsUsage, tc.givenBucketDetails)
+			aggregated := getAggregatedBuckets(ctx, tc.givenSosBucketsUsage, tc.givenBucketDetails, 1)
 
 			// Then
-			assert.True(t, reflect.DeepEqual(aggregated, tc.expectedAggregated))
+			assert.Equal(t, tc.expectedAggregated, aggregated)
 		})
 	}
 }
@@ -131,7 +131,7 @@ func TestObjectStorage_addOrgAndNamespaceToBucket(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Given
-			ctx := context.Background()
+			ctx := getTestContext(t)
 
 			// When
 			bucketDetails := addOrgAndNamespaceToBucket(ctx, tc.givenBucketList, tc.givenNamespaces)
@@ -148,7 +148,7 @@ func createBucket(name, namespace, organization string) exoscalev1.Bucket {
 		labels[namespaceLabel] = namespace
 	}
 	if organization != "" {
-		labels[organizationLabel] = organization
+		labels[kubernetes.OrganizationLabel] = organization
 	}
 	return exoscalev1.Bucket{
 		ObjectMeta: metav1.ObjectMeta{
@@ -164,11 +164,14 @@ func createBucket(name, namespace, organization string) exoscalev1.Bucket {
 	}
 }
 
-func createAggregated(key Key, organization string, size float64) Aggregated {
+func createAggregated(key Key, organization, namespace string, size float64) Aggregated {
 	return Aggregated{
-		Key:          key,
-		Organization: organization,
-		Value:        size,
+		Key:   key,
+		Value: size / 1024 / 1024 / 1024,
+		Source: exofixtures.SOSSourceString{
+			Namespace:    namespace,
+			Organization: organization,
+		},
 	}
 }
 

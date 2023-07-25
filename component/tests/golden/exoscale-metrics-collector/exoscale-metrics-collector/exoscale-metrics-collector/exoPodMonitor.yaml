@@ -1,0 +1,11 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: exoscale-podmonitor
+  namespace: appuio-cloud-reporting
+spec:
+  podMetricsEndpoints:
+    - port: exporter
+  selector:
+    matchLabels:
+      name: exoscale

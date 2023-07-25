@@ -83,3 +83,20 @@ $(test_instances):
 .PHONY: clean
 clean: ## Clean the project
 	rm -rf .cache compiled dependencies vendor helmcharts jsonnetfile*.json || true
+
+.PHONY: gen-golden-from-env
+instance=fromenv
+gen-golden-from-env: set-credentials gen-golden reset-credentials
+
+.PHONY: set-credentials
+set-credentials:
+	@test -n "$(EXOSCALE_API_KEY)"
+	@test -n "$(EXOSCALE_API_SECRET)"
+	@test -n "$(CLOUDSCALE_API_TOKEN)"
+	@yq e -i '.parameters.billing_collector_cloudservices.secrets.exoscale.credentials.stringData.EXOSCALE_API_KEY = "$(EXOSCALE_API_KEY)"' tests/fromenv.yml
+	@yq e -i '.parameters.billing_collector_cloudservices.secrets.exoscale.credentials.stringData.EXOSCALE_API_SECRET = "$(EXOSCALE_API_SECRET)"' tests/fromenv.yml
+	@yq e -i '.parameters.billing_collector_cloudservices.secrets.cloudscale.credentials.stringData.CLOUDSCALE_API_TOKEN = "$(CLOUDSCALE_API_TOKEN)"' tests/fromenv.yml
+
+.PHONY: reset-credentials
+reset-credentials:
+	git checkout tests/fromenv.yml

@@ -1,0 +1,28 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations: {}
+  labels:
+    name: appcat-cloudcollector-exoscale
+  name: appcat:cloudcollector:exoscale
+rules:
+  - apiGroups:
+      - '*'
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - exoscale.crossplane.io
+    resources:
+      - buckets
+      - postgresqls
+      - mysqls
+      - redis
+      - opensearches
+      - kafkas
+    verbs:
+      - get
+      - list
+      - watch

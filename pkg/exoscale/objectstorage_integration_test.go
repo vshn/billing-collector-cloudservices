@@ -3,23 +3,23 @@
 package exoscale
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/appuio/appuio-cloud-reporting/pkg/db"
 	egoscale "github.com/exoscale/egoscale/v2"
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
 	"github.com/vshn/billing-collector-cloudservices/pkg/exofixtures"
-	"github.com/vshn/billing-collector-cloudservices/pkg/reporting"
+	"github.com/vshn/billing-collector-cloudservices/pkg/kubernetes"
+	"github.com/vshn/billing-collector-cloudservices/pkg/prom"
 	"github.com/vshn/billing-collector-cloudservices/pkg/test"
 	exoscalev1 "github.com/vshn/provider-exoscale/apis/exoscale/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const objectStorageBind = ":9125"
 
 type ObjectStorageTestSuite struct {
 	test.Suite
@@ -30,7 +30,7 @@ func (ts *ObjectStorageTestSuite) SetupSuite() {
 	exoscaleCRDPaths := os.Getenv("EXOSCALE_CRDS_PATH")
 	ts.Require().NotZero(exoscaleCRDPaths, "missing env variable EXOSCALE_CRDS_PATH")
 
-	ts.SetupEnv([]string{exoscaleCRDPaths})
+	ts.SetupEnv([]string{exoscaleCRDPaths}, objectStorageBind)
 
 	ts.RegisterScheme(exoscalev1.SchemeBuilder.AddToScheme)
 }
@@ -49,10 +49,6 @@ func (ts *ObjectStorageTestSuite) TestMetrics() {
 	o, cancel := ts.setupObjectStorage()
 	defer cancel()
 
-	expectedQuantities := map[string]float64{
-		"example-project": 932.253897190094,
-		"next-big-thing":  0,
-	}
 	nameNsMap := map[string]string{
 		"example-project-a": "example-project",
 		"example-project-b": "example-project",
@@ -65,55 +61,39 @@ func (ts *ObjectStorageTestSuite) TestMetrics() {
 	ts.ensureBuckets(nameNsMap)
 
 	for ns, tenant := range nsTenantMap {
-		ts.EnsureNS(ns, map[string]string{organizationLabel: tenant})
+		ts.EnsureNS(ns, map[string]string{kubernetes.OrganizationLabel: tenant})
 	}
 
-	assert.NoError(o.Execute(ctx))
-
-	store, err := reporting.NewStore(ts.DatabaseURL, ts.Logger)
-	assert.NoError(err)
-	defer func() {
-		assert.NoError(store.Close())
-	}()
-
-	// a bit pointless to use a transaction for checking the results but I wanted to avoid exposing something
-	// which should not be used outside test code.
-	assert.NoError(store.WithTransaction(ctx, func(tx *sqlx.Tx) error {
-		dt, err := reporting.GetDateTime(ctx, tx, ts.billingDate)
-		if !assert.NoError(err) || !assert.NotZero(dt) {
-			return fmt.Errorf("no dateTime found(%q): %w (nil? %v)", ts.billingDate, err, dt)
-		}
-
-		for ns, expectedQuantity := range expectedQuantities {
-			fact, err := ts.getFact(ctx, tx, ts.billingDate, dt, objectStorageSource{
-				namespace:   ns,
-				tenant:      nsTenantMap[ns],
-				objectType:  exofixtures.SosType,
-				billingDate: ts.billingDate,
-			})
-			assert.NoError(err, ns)
-
-			assert.NotNil(fact, ns)
-			assert.Equal(expectedQuantity, fact.Quantity, ns)
-		}
-		return nil
-	}))
-}
-
-func (ts *ObjectStorageTestSuite) getFact(ctx context.Context, tx *sqlx.Tx, date time.Time, dt *db.DateTime, src objectStorageSource) (*db.Fact, error) {
-	sourceString := sosSourceString{
-		ObjectType: src.objectType,
-		provider:   exofixtures.Provider,
+	assertMetrics := []test.PromMetric{
+		{
+			Product:  "appcat_object-storage-storage:exoscale:example-company:example-project",
+			Category: "exoscale:example-project",
+			Value:    932.253897190094,
+		},
+		{
+			Product:  "appcat_object-storage-storage:exoscale:big-corporation:next-big-thing",
+			Category: "exoscale:next-big-thing",
+			Value:    0,
+		},
 	}
-	record := reporting.Record{
-		TenantSource:   src.tenant,
-		CategorySource: exofixtures.Provider + ":" + src.namespace,
-		BillingDate:    date,
-		ProductSource:  sourceString.getSourceString(),
-		DiscountSource: sourceString.getSourceString(),
-		QueryName:      sourceString.getQuery(),
+
+	// This test doesn't divide the values, it tests with 1 hour remaining for the day
+	metrics, err := o.Accumulate(ctx, 23)
+	assert.NoError(err, "cannot accumulate exoscale object storage")
+	assert.NoError(Export(metrics))
+	assert.NoError(test.AssertPromMetrics(assert, assertMetrics, objectStorageBind), "cannot assert prom metrics")
+	prom.ResetAppCatMetric()
+
+	// This test simulates exporting the metrics from 06:00 for the rest of the day
+	// For that we'll have to divide the values by 18 to match up.
+	for i := range assertMetrics {
+		assertMetrics[i].Value = assertMetrics[i].Value / float64(18)
 	}
-	return test.FactByRecord(ctx, tx, dt, record)
+	metrics, err = o.Accumulate(ctx, 6)
+	assert.NoError(err, "cannot accumulate exoscale object storage")
+	assert.NoError(Export(metrics))
+	assert.NoError(test.AssertPromMetrics(assert, assertMetrics, objectStorageBind), "cannot assert prom metrics")
+	prom.ResetAppCatMetric()
 }
 
 func (ts *ObjectStorageTestSuite) ensureBuckets(nameNsMap map[string]string) {
@@ -136,8 +116,7 @@ func (ts *ObjectStorageTestSuite) setupObjectStorage() (*ObjectStorage, func()) 
 	exoClient, cancel, err := newEgoscaleClient(ts.T())
 	ts.Assert().NoError(err)
 
-	ts.billingDate = time.Date(2023, 1, 11, 6, 0, 0, 0, time.UTC)
-	o, err := NewObjectStorage(exoClient, ts.Client, ts.DatabaseURL, ts.billingDate)
+	o, err := NewObjectStorage(exoClient, ts.Client, "")
 	ts.Assert().NoError(err)
 	return o, cancel
 }

@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  annotations: {}
+  labels:
+    name: exoscale
+  name: exoscale
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: appcat:cloudcollector:exoscale
+subjects:
+  - kind: ServiceAccount
+    name: exoscale
+    namespace: appuio-cloud-reporting

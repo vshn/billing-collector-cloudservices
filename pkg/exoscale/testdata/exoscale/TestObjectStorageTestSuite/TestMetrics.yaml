@@ -74,3 +74,76 @@ interactions:
         status: 200 OK
         code: 200
         duration: 121.733547ms
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        transfer_encoding: []
+        trailer: {}
+        host: api-ch-gva-2.exoscale.com
+        remote_addr: ""
+        request_uri: ""
+        body: ""
+        form: {}
+        headers:
+            User-Agent:
+                - egoscale/0.90.1 (go1.19.4; linux/amd64)
+        url: https://api-ch-gva-2.exoscale.com/v2/sos-buckets-usage
+        method: GET
+      response:
+        proto: HTTP/2.0
+        proto_major: 2
+        proto_minor: 0
+        transfer_encoding: []
+        trailer: {}
+        content_length: -1
+        uncompressed: false
+        body: |
+          {
+            "sos-buckets-usage": [
+              {
+                "name": "example-project-a",
+                "created-at": "2023-01-01T09:42:00+00:00",
+                "zone-name": "ch-gva-2",
+                "size": 1000000000000
+              },
+              {
+                "name": "example-project-b",
+                "created-at": "2023-01-01T09:42:00+00:00",
+                "zone-name": "ch-gva-2",
+                "size": 1000000000
+              },
+              {
+                "name": "next-big-thing-a",
+                "created-at": "2023-01-01T09:42:00+00:00",
+                "zone-name": "ch-gva-2",
+                "size": 0
+              },
+              {
+                "name": "not-mapped",
+                "created-at": "2023-01-01T09:42:00+00:00",
+                "zone-name": "ch-gva-2",
+                "size": 12345567889
+              }
+            ]
+          }
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+            Date:
+                - Mon, 16 Jan 2023 12:32:10 GMT
+            Exo-Cm-Hash:
+                - fa090b3af8b19f68b7ffe515ecedefef
+            Referrer-Policy:
+                - no-referrer-when-downgrade
+            Strict-Transport-Security:
+                - max-age=31557600; includeSubDomains; preload
+            X-Content-Type-Options:
+                - nosniff always
+            X-Xss-Protection:
+                - 1; mode=block always
+        status: 200 OK
+        code: 200
+        duration: 121.733547ms

@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/cloudscale-ch/cloudscale-go-sdk/v2"
+	"github.com/vshn/billing-collector-cloudservices/pkg/kubernetes"
+	"github.com/vshn/billing-collector-cloudservices/pkg/log"
 	cloudscalev1 "github.com/vshn/provider-cloudscale/apis/cloudscale/v1"
-	corev1 "k8s.io/api/core/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -20,21 +20,26 @@ const (
 // AccumulateKey represents one data point ("fact") in the billing database.
 // The actual value for the data point is not present in this type, as this type is just a map key, and the corresponding value is stored as a map value.
 type AccumulateKey struct {
-	Query     string
+	Query string
+	// Zone is currently always just `cloudscale`
 	Zone      string
 	Tenant    string
 	Namespace string
 	Start     time.Time
 }
 
-// String returns the full "source" string as used by the appuio-cloud-reporting
-func (k AccumulateKey) String() string {
+// GetSourceString returns the full "source" string as used by the appuio-cloud-reporting
+func (k AccumulateKey) GetSourceString() string {
 	return k.Query + ":" + k.Zone + ":" + k.Tenant + ":" + k.Namespace
+}
+
+func (k AccumulateKey) GetCategoryString() string {
+	return k.Zone + ":" + k.Namespace
 }
 
 // MarshalText implements encoding.TextMarshaler to be able to e.g. log the map with this key type.
 func (k AccumulateKey) MarshalText() ([]byte, error) {
-	return []byte(k.String()), nil
+	return []byte(k.GetSourceString()), nil
 }
 
 /*
@@ -44,8 +49,8 @@ correct AccumulateKey, this function needs to fetch the namespace and bucket cus
 This method is "accumulating" data because it collects data from possibly multiple ObjectsUsers under the same
 AccumulateKey. This is because the billing system can't handle multiple ObjectsUsers per namespace.
 */
-func accumulateBucketMetrics(ctx context.Context, date time.Time, cloudscaleClient *cloudscale.Client, k8sclient client.Client) (map[AccumulateKey]uint64, error) {
-	logger := ctrl.LoggerFrom(ctx)
+func accumulateBucketMetrics(ctx context.Context, date time.Time, cloudscaleClient *cloudscale.Client, k8sclient client.Client, orgOverride string) (map[AccumulateKey]uint64, error) {
+	logger := log.Logger(ctx)
 
 	logger.V(1).Info("fetching bucket metrics from cloudscale", "date", date)
 
@@ -57,7 +62,7 @@ func accumulateBucketMetrics(ctx context.Context, date time.Time, cloudscaleClie
 
 	logger.V(1).Info("fetching namespaces")
 
-	nsTenants, err := fetchNamespaces(ctx, k8sclient)
+	nsTenants, err := kubernetes.FetchNamespaceWithOrganizationMap(ctx, k8sclient, orgOverride)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +94,7 @@ func accumulateBucketMetrics(ctx context.Context, date time.Time, cloudscaleClie
 			logger.Error(err, "unable to sync bucket", "namespace", ns)
 			continue
 		}
-		logger.V(1).Info("accumulated bucket metrics", "namespace", ns, "tenant", tenant, "accumulated", accumulated)
+		logger.V(1).Info("accumulated raw bucket metrics", "namespace", ns, "tenant", tenant, "accumulated", accumulated)
 	}
 
 	return accumulated, nil
@@ -106,19 +111,6 @@ func fetchBuckets(ctx context.Context, k8sclient client.Client) (map[string]stri
 		bucketNS[b.GetBucketName()] = b.Labels[namespaceLabel]
 	}
 	return bucketNS, nil
-}
-
-func fetchNamespaces(ctx context.Context, k8sclient client.Client) (map[string]string, error) {
-	namespaces := &corev1.NamespaceList{}
-	if err := k8sclient.List(ctx, namespaces, client.HasLabels{organizationLabel}); err != nil {
-		return nil, fmt.Errorf("namespace list: %w", err)
-	}
-
-	nsTenants := map[string]string{}
-	for _, ns := range namespaces.Items {
-		nsTenants[ns.Name] = ns.Labels[organizationLabel]
-	}
-	return nsTenants, nil
 }
 
 func accumulateBucketMetricsForObjectsUser(accumulated map[AccumulateKey]uint64, bucketMetricsData cloudscale.BucketMetricsData, tenant, namespace string) error {

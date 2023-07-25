@@ -3,19 +3,15 @@
 package exoscale
 
 import (
-	"context"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/appuio/appuio-cloud-reporting/pkg/db"
 	"github.com/exoscale/egoscale/v2/oapi"
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
-	"github.com/vshn/billing-collector-cloudservices/pkg/exofixtures"
-	"github.com/vshn/billing-collector-cloudservices/pkg/reporting"
+	"github.com/vshn/billing-collector-cloudservices/pkg/kubernetes"
+	"github.com/vshn/billing-collector-cloudservices/pkg/prom"
 	"github.com/vshn/billing-collector-cloudservices/pkg/test"
 	exoscalev1 "github.com/vshn/provider-exoscale/apis/exoscale/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const dbaasBind = ":9124"
 
 type DBaaSTestSuite struct {
 	test.Suite
@@ -33,7 +31,7 @@ func (ts *DBaaSTestSuite) SetupSuite() {
 	exoscaleCRDPaths := os.Getenv("EXOSCALE_CRDS_PATH")
 	ts.Require().NotZero(exoscaleCRDPaths, "missing env variable EXOSCALE_CRDS_PATH")
 
-	ts.SetupEnv([]string{exoscaleCRDPaths})
+	ts.SetupEnv([]string{exoscaleCRDPaths}, dbaasBind)
 
 	ts.RegisterScheme(exoscalev1.SchemeBuilder.AddToScheme)
 }
@@ -57,7 +55,7 @@ func (ts *DBaaSTestSuite) TestMetrics() {
 		"next-big-thing":  "big-corporation",
 	}
 	for ns, tenant := range nsTenantMap {
-		ts.EnsureNS(ns, map[string]string{organizationLabel: tenant})
+		ts.EnsureNS(ns, map[string]string{kubernetes.OrganizationLabel: tenant})
 	}
 
 	tests := make(map[string]testcase)
@@ -128,36 +126,51 @@ func (ts *DBaaSTestSuite) TestMetrics() {
 		ts.EnsureResources(obj)
 	}
 
-	assert.NoError(ds.Execute(ctx))
+	assertMetrics := []test.PromMetric{
+		{
+			Product:  "appcat_opensearch:exoscale:example-company:example-project:hobbyist-2",
+			Category: "exoscale:example-project",
+			Value:    1,
+		},
+		{
+			Product:  "appcat_postgres:exoscale:example-company:example-project:premium-225",
+			Category: "exoscale:example-project",
+			Value:    1,
+		},
+		{
+			Product:  "appcat_postgres:exoscale:big-corporation:next-big-thing:business-225",
+			Category: "exoscale:next-big-thing",
+			Value:    1,
+		},
+		{
+			Product:  "appcat_mysql:exoscale:example-company:example-project:hobbyist-2",
+			Category: "exoscale:example-project",
+			Value:    1,
+		},
+		{
+			Product:  "appcat_opensearch:exoscale:example-company:example-project:hobbyist-2",
+			Category: "exoscale:example-project",
+			Value:    1,
+		},
+		{
+			Product:  "appcat_redis:exoscale:example-company:example-project:hobbyist-2",
+			Category: "exoscale:example-project",
+			Value:    1,
+		},
+		{
+			Product:  "appcat_kafka:exoscale:example-company:example-project:startup-2",
+			Category: "exoscale:example-project",
+			Value:    1,
+		},
+	}
 
-	store, err := reporting.NewStore(ts.DatabaseURL, ts.Logger)
-	assert.NoError(err)
-	defer func() {
-		assert.NoError(store.Close())
-	}()
+	metrics, err := ds.Accumulate(ctx)
+	assert.NoError(err, "cannot accumulate dbaas")
 
-	// a bit pointless to use a transaction for checking the results but I wanted to avoid exposing something
-	// which should not be used outside test code.
-	assert.NoError(store.WithTransaction(ctx, func(tx *sqlx.Tx) error {
-		dt, err := reporting.GetDateTime(ctx, tx, ts.billingDate)
-		if !assert.NoError(err) || !assert.NotZero(dt) {
-			return fmt.Errorf("no dateTime found(%q): %w (nil? %v)", ts.billingDate, err, dt)
-		}
+	assert.NoError(Export(metrics))
+	assert.NoError(test.AssertPromMetrics(assert, assertMetrics, dbaasBind), "cannot assert prom metrics")
+	prom.ResetAppCatMetric()
 
-		for _, want := range expectedQuantities {
-			fact, err := ts.getFact(ctx, tx, ts.billingDate, dt, dbaasSource{
-				dbType:    string(want.tc.dbType),
-				tenant:    nsTenantMap[want.tc.ns],
-				namespace: want.tc.ns,
-				plan:      want.tc.plan,
-			})
-			assert.NoError(err, want.tc.ns)
-
-			assert.NotNil(fact, want.tc.ns)
-			assert.Equal(want.value, fact.Quantity, want.tc.ns)
-		}
-		return nil
-	}))
 }
 
 type dbaasSource struct {
@@ -165,24 +178,6 @@ type dbaasSource struct {
 	tenant    string
 	namespace string
 	plan      string
-}
-
-func (ts *DBaaSTestSuite) getFact(ctx context.Context, tx *sqlx.Tx, date time.Time, dt *db.DateTime, src dbaasSource) (*db.Fact, error) {
-	sourceString := exofixtures.DBaaSSourceString{
-		Query:        exofixtures.BillingTypes[src.dbType],
-		Organization: src.tenant,
-		Namespace:    src.namespace,
-		Plan:         src.plan,
-	}
-	record := reporting.Record{
-		TenantSource:   src.tenant,
-		CategorySource: exofixtures.Provider + ":" + src.namespace,
-		BillingDate:    date,
-		ProductSource:  sourceString.GetSourceString(),
-		DiscountSource: sourceString.GetSourceString(),
-		QueryName:      sourceString.GetQuery(),
-	}
-	return test.FactByRecord(ctx, tx, dt, record)
 }
 
 func (ts *DBaaSTestSuite) ensureBuckets(nameNsMap map[string]string) {
@@ -205,8 +200,7 @@ func (ts *DBaaSTestSuite) setupDBaaS() (*DBaaS, func()) {
 	exoClient, cancel, err := newEgoscaleClient(ts.T())
 	ts.Assert().NoError(err)
 
-	ts.billingDate = time.Date(2023, 1, 11, 6, 0, 0, 0, time.UTC)
-	ds, err := NewDBaaS(exoClient, ts.Client, ts.DatabaseURL, ts.billingDate)
+	ds, err := NewDBaaS(exoClient, ts.Client, "")
 	ts.Assert().NoError(err)
 	return ds, cancel
 }

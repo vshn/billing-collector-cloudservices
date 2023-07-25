@@ -4,21 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
-	"strings"
 	"testing"
+	"time"
 
-	"github.com/appuio/appuio-cloud-reporting/pkg/db"
 	"github.com/go-logr/logr"
-	"github.com/go-logr/zapr"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v4"
-	"github.com/jmoiron/sqlx"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/vshn/billing-collector-cloudservices/pkg/reporting"
-	"go.uber.org/zap/zaptest"
+	"github.com/vshn/billing-collector-cloudservices/pkg/log"
+	"github.com/vshn/billing-collector-cloudservices/pkg/prom"
 	"gopkg.in/dnaeon/go-vcr.v3/cassette"
 	"gopkg.in/dnaeon/go-vcr.v3/recorder"
 	corev1 "k8s.io/api/core/v1"
@@ -28,7 +21,6 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type Suite struct {
@@ -42,38 +34,24 @@ type Suite struct {
 	Context context.Context
 	cancel  context.CancelFunc
 	Scheme  *runtime.Scheme
-
-	DatabaseURL   string
-	tmpDBName     string
-	maintenanceDB *sqlx.DB
 }
 
 // SetupSuite is used for setting up the testsuite before all tests are run. If you need to override it, make sure to call `SetupEnv()` first.
 func (ts *Suite) SetupSuite() {
-	ts.SetupEnv(nil)
+	ts.SetupEnv(nil, "")
 }
 
-// SetupTest ensures a separate temporary DB for each test
-func (ts *Suite) SetupTest() {
-	ts.setupDB()
-}
-
-// TearDownTest cleans up temporary DB after each test
-func (ts *Suite) TearDownTest() {
-	assert := ts.Assert()
-	assert.NoError(dropDB(ts.maintenanceDB, pgx.Identifier{ts.tmpDBName}))
-	assert.NoError(ts.maintenanceDB.Close())
-}
-
-func (ts *Suite) SetupEnv(crdPaths []string) {
+func (ts *Suite) SetupEnv(crdPaths []string, bindString string) {
 	ts.T().Helper()
 
 	assert := ts.Assert()
 
-	ts.Logger = zapr.NewLogger(zaptest.NewLogger(ts.T()))
-	log.SetLogger(ts.Logger)
+	logger, err := log.NewLogger("integrationtest", time.Now().String(), 1, "console")
+	assert.NoError(err, "cannot initialize logger")
 
-	ts.Context, ts.cancel = context.WithCancel(context.Background())
+	ts.Context = log.NewLoggingContext(context.Background(), logger)
+	ts.Logger = logger
+	ts.Context, ts.cancel = context.WithCancel(ts.Context)
 
 	envtestAssets, ok := os.LookupEnv("KUBEBUILDER_ASSETS")
 	if !ok {
@@ -102,6 +80,14 @@ func (ts *Suite) SetupEnv(crdPaths []string) {
 	ts.Env = testEnv
 	ts.Config = config
 	ts.Client = k8sClient
+
+	go func() {
+		assert.NoError(ts.exportMetrics(bindString), "error exportig the metrics")
+	}()
+}
+
+func (ts *Suite) exportMetrics(bindString string) error {
+	return prom.ServeMetrics(ts.Context, bindString)
 }
 
 // RegisterScheme passes the current scheme to the given SchemeBuilder func.
@@ -143,69 +129,6 @@ func (ts *Suite) EnsureNS(name string, labels map[string]string) {
 	})
 }
 
-func (ts *Suite) setupDB() {
-	ts.T().Helper()
-
-	assert := ts.Assert()
-
-	databaseURL := os.Getenv("ACR_DB_URL")
-	assert.NotZero(databaseURL)
-
-	u, err := url.Parse(databaseURL)
-	assert.NoError(err)
-
-	dbName := strings.TrimPrefix(u.Path, "/")
-	tmpDbName := dbName + "-tmp-" + uuid.NewString()
-	ts.tmpDBName = tmpDbName
-
-	// Connect to a neutral database
-	mdb, err := openMaintenance(databaseURL)
-	require.NoError(ts.T(), err)
-	ts.maintenanceDB = mdb
-
-	require.NoError(ts.T(),
-		cloneDB(ts.maintenanceDB, pgx.Identifier{tmpDbName}, pgx.Identifier{dbName}),
-	)
-
-	// Connect to the temporary database
-	tmpURL := new(url.URL)
-	*tmpURL = *u
-	tmpURL.Path = "/" + tmpDbName
-	ts.T().Logf("Using database name: %s", tmpDbName)
-	ts.DatabaseURL = tmpURL.String()
-}
-
-func cloneDB(maint *sqlx.DB, dst, src pgx.Identifier) error {
-	_, err := maint.Exec(fmt.Sprintf(`CREATE DATABASE %s TEMPLATE %s`,
-		dst.Sanitize(),
-		src.Sanitize()))
-	if err != nil {
-		return fmt.Errorf("error cloning database `%s` to `%s`: %w", src.Sanitize(), dst.Sanitize(), err)
-	}
-	return nil
-}
-
-func dropDB(maint *sqlx.DB, name pgx.Identifier) error {
-	_, err := maint.Exec(fmt.Sprintf(`DROP DATABASE %s WITH (FORCE)`, name.Sanitize()))
-	if err != nil {
-		return fmt.Errorf("error dropping database `%s`: %w", name.Sanitize(), err)
-	}
-	return nil
-}
-
-func openMaintenance(dbURL string) (*sqlx.DB, error) {
-	maintURL, err := url.Parse(dbURL)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing url: %w", err)
-	}
-	maintURL.Path = "/postgres"
-	mdb, err := db.Openx(maintURL.String())
-	if err != nil {
-		return nil, fmt.Errorf("error connecting to maintenance (`%s`) database: %w", maintURL.Path, err)
-	}
-	return mdb, nil
-}
-
 func RequestRecorder(t *testing.T, path string) (*http.Client, func(), error) {
 	t.Helper()
 
@@ -231,44 +154,4 @@ func RequestRecorder(t *testing.T, path string) (*http.Client, func(), error) {
 	}, recorder.AfterCaptureHook)
 
 	return r.GetDefaultClient(), cancel, nil
-}
-
-func FactByRecord(ctx context.Context, tx *sqlx.Tx, dt *db.DateTime, record reporting.Record) (*db.Fact, error) {
-	query, err := reporting.GetQueryByName(ctx, tx, record.QueryName)
-	if err != nil {
-		return nil, fmt.Errorf("query: %w", err)
-	}
-
-	tenant, err := reporting.GetTenantBySource(ctx, tx, record.TenantSource)
-	if err != nil {
-		return nil, fmt.Errorf("tenant: %w", err)
-	}
-
-	category, err := reporting.GetCategory(ctx, tx, record.CategorySource)
-	if err != nil {
-		return nil, fmt.Errorf("category: %w", err)
-	}
-
-	product, err := reporting.GetBestMatchingProduct(ctx, tx, record.ProductSource, record.BillingDate)
-	if err != nil {
-		return nil, fmt.Errorf("product: %w", err)
-	}
-
-	discount, err := reporting.GetBestMatchingDiscount(ctx, tx, record.DiscountSource, record.BillingDate)
-	if err != nil {
-		return nil, fmt.Errorf("discount: %w", err)
-	}
-
-	fact, err := reporting.GetByFact(ctx, tx, &db.Fact{
-		DateTimeId: dt.Id,
-		QueryId:    query.Id,
-		TenantId:   tenant.Id,
-		CategoryId: category.Id,
-		ProductId:  product.Id,
-		DiscountId: discount.Id,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("fact: %w", err)
-	}
-	return fact, nil
 }

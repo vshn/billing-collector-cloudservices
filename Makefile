@@ -30,7 +30,7 @@ build-bin: fmt vet ## Build binary
 build-docker: ## Build docker image
 	env CGO_ENABLED=0 GOOS=$(DOCKER_IMAGE_GOOS) GOARCH=$(DOCKER_IMAGE_GOARCH) \
 		go build -o ${BIN_FILENAME}
-	$(DOCKER_CMD) build -t $(CONTAINER_IMG) .
+	$(DOCKER_CMD) build --platform $(DOCKER_IMAGE_GOOS)/$(DOCKER_IMAGE_GOARCH) -t $(CONTAINER_IMG) .
 
 .PHONY: docs-serve
 docs-serve: ## Preview the documentation

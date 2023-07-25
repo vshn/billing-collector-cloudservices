@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations: {}
+  labels:
+    app.kubernetes.io/component: billing-collector-cloudservices
+    app.kubernetes.io/managed-by: commodore
+    app.kubernetes.io/name: billing-collector-cloudservices
+    app.kubernetes.io/part-of: appuio-cloud-reporting
+    name: exoscale
+  name: exoscale
+  namespace: appuio-cloud-reporting
+spec:
+  minReadySeconds: 30
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: billing-collector-cloudservices
+      app.kubernetes.io/managed-by: commodore
+      app.kubernetes.io/name: billing-collector-cloudservices
+      app.kubernetes.io/part-of: appuio-cloud-reporting
+      name: exoscale
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations: {}
+      labels:
+        app.kubernetes.io/component: billing-collector-cloudservices
+        app.kubernetes.io/managed-by: commodore
+        app.kubernetes.io/name: billing-collector-cloudservices
+        app.kubernetes.io/part-of: appuio-cloud-reporting
+        name: exoscale
+    spec:
+      containers:
+        - args:
+            - --organizationOverride
+            - t-silent-test-1234
+            - --collectInterval
+            - '60'
+            - exoscale
+          env: []
+          envFrom:
+            - secretRef:
+                name: credentials-exoscale
+          image: ghcr.io/vshn/billing-collector-cloudservices:change_exporter
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9123
+            periodSeconds: 30
+          name: exporter
+          ports:
+            - containerPort: 9123
+              name: exporter
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9123
+            periodSeconds: 30
+          stdin: false
+          tty: false
+          volumeMounts: []
+      imagePullSecrets: []
+      initContainers: []
+      serviceAccount: exoscale
+      terminationGracePeriodSeconds: 30
+      volumes: []

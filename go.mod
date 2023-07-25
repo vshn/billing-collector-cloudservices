@@ -5,12 +5,12 @@ go 1.19
 require (
 	github.com/appuio/appuio-cloud-reporting v0.10.0
 	github.com/cloudscale-ch/cloudscale-go-sdk/v2 v2.1.0
-	github.com/exoscale/egoscale v0.90.1
+	github.com/exoscale/egoscale v0.100.1
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
-	github.com/google/uuid v1.3.0
-	github.com/jackc/pgx/v4 v4.18.1
-	github.com/jmoiron/sqlx v1.3.5
+	github.com/prometheus/client_golang v1.14.0
+	github.com/prometheus/client_model v0.3.0
+	github.com/prometheus/common v0.40.0
 	github.com/stretchr/testify v1.8.2
 	github.com/urfave/cli/v2 v2.24.4
 	github.com/vshn/provider-cloudscale v0.5.0
@@ -25,7 +25,6 @@ require (
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
-	github.com/benbjohnson/clock v1.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
@@ -44,6 +43,7 @@ require (
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v1.2.0 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.2 // indirect
@@ -55,6 +55,8 @@ require (
 	github.com/jackc/pgproto3/v2 v2.3.2 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/pgtype v1.14.0 // indirect
+	github.com/jackc/pgx/v4 v4.18.1 // indirect
+	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
@@ -69,9 +71,6 @@ require (
 	github.com/onsi/gomega v1.24.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.14.0 // indirect
-	github.com/prometheus/client_model v0.3.0 // indirect
-	github.com/prometheus/common v0.40.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spf13/afero v1.9.3 // indirect

@@ -3,22 +3,20 @@
 package cloudscale
 
 import (
-	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/appuio/appuio-cloud-reporting/pkg/db"
 	"github.com/cloudscale-ch/cloudscale-go-sdk/v2"
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/suite"
-	"github.com/vshn/billing-collector-cloudservices/pkg/reporting"
+	"github.com/vshn/billing-collector-cloudservices/pkg/prom"
 	"github.com/vshn/billing-collector-cloudservices/pkg/test"
 	cloudscalev1 "github.com/vshn/provider-cloudscale/apis/cloudscale/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const objectStorageBind = ":9123"
 
 type ObjectStorageTestSuite struct {
 	test.Suite
@@ -29,7 +27,7 @@ func (ts *ObjectStorageTestSuite) SetupSuite() {
 	cloudscaleCRDsPath := os.Getenv("CLOUDSCALE_CRDS_PATH")
 	ts.Require().NotZero(cloudscaleCRDsPath, "missing env variable CLOUDSCALE_CRDS_PATH")
 
-	ts.SetupEnv([]string{cloudscaleCRDsPath})
+	ts.SetupEnv([]string{cloudscaleCRDsPath}, objectStorageBind)
 
 	ts.RegisterScheme(cloudscalev1.SchemeBuilder.AddToScheme)
 }
@@ -47,49 +45,37 @@ func (ts *ObjectStorageTestSuite) TestMetrics() {
 	o, cancel := ts.setupObjectStorage()
 	defer cancel()
 
-	expectedQuantities := map[AccumulateKey]float64{
-		AccumulateKey{
-			Query:     sourceQueryStorage,
-			Zone:      sourceZones[0],
-			Tenant:    "example-company",
-			Namespace: "example-project",
-			Start:     ts.billingDate,
-		}: 1000.000004096,
-		AccumulateKey{
-			Query:     sourceQueryRequests,
-			Zone:      sourceZones[0],
-			Tenant:    "example-company",
-			Namespace: "example-project",
-			Start:     ts.billingDate,
-		}: 100.001,
-		AccumulateKey{
-			Query:     sourceQueryTrafficOut,
-			Zone:      sourceZones[0],
-			Tenant:    "example-company",
-			Namespace: "example-project",
-			Start:     ts.billingDate,
-		}: 50.0,
-		AccumulateKey{
-			Query:     sourceQueryStorage,
-			Zone:      sourceZones[0],
-			Tenant:    "big-corporation",
-			Namespace: "next-big-thing",
-			Start:     ts.billingDate,
-		}: 0,
-		AccumulateKey{
-			Query:     sourceQueryRequests,
-			Zone:      sourceZones[0],
-			Tenant:    "big-corporation",
-			Namespace: "next-big-thing",
-			Start:     ts.billingDate,
-		}: 0.001,
-		AccumulateKey{
-			Query:     sourceQueryTrafficOut,
-			Zone:      sourceZones[0],
-			Tenant:    "big-corporation",
-			Namespace: "next-big-thing",
-			Start:     ts.billingDate,
-		}: 0,
+	assertMetrics := []test.PromMetric{
+		{
+			Category: "cloudscale:example-project",
+			Product:  "appcat_object-storage-requests:cloudscale:example-company:example-project",
+			Value:    100.001,
+		},
+		{
+			Category: "cloudscale:example-project",
+			Product:  "appcat_object-storage-storage:cloudscale:example-company:example-project",
+			Value:    1000.000004096,
+		},
+		{
+			Category: "cloudscale:example-project",
+			Product:  "appcat_object-storage-traffic-out:cloudscale:example-company:example-project",
+			Value:    50,
+		},
+		{
+			Category: "cloudscale:next-big-thing",
+			Product:  "appcat_object-storage-requests:cloudscale:big-corporation:next-big-thing",
+			Value:    0.001,
+		},
+		{
+			Category: "cloudscale:next-big-thing",
+			Product:  "appcat_object-storage-storage:cloudscale:big-corporation:next-big-thing",
+			Value:    0,
+		},
+		{
+			Category: "cloudscale:next-big-thing",
+			Product:  "appcat_object-storage-traffic-out:cloudscale:big-corporation:next-big-thing",
+			Value:    0,
+		},
 	}
 	nameNsMap := map[string]string{
 		"example-project-a": "example-project",
@@ -110,46 +96,23 @@ func (ts *ObjectStorageTestSuite) TestMetrics() {
 		}
 	}
 
-	assert.NoError(o.Execute(ctx))
-
-	store, err := reporting.NewStore(ts.DatabaseURL, ts.Logger)
+	testDate := time.Date(2023, 1, 11, 0, 0, 0, 0, time.Local)
+	metrics, err := o.Accumulate(ctx, testDate)
 	assert.NoError(err)
-	defer func() {
-		assert.NoError(store.Close())
-	}()
 
-	// a bit pointless to use a transaction for checking the results but I wanted to avoid exposing something
-	// which should not be used outside test code.
-	assert.NoError(store.WithTransaction(ctx, func(tx *sqlx.Tx) error {
-		dt, err := reporting.GetDateTime(ctx, tx, ts.billingDate)
-		if !assert.NoError(err) || !assert.NotZero(dt) {
-			return fmt.Errorf("no dateTime found(%q): %w (nil? %v)", ts.billingDate, err, dt)
-		}
+	// This test doesn't divide the values, it tests with 1 hour remaining for the day
+	assert.NoError(Export(metrics, 23))
+	assert.NoError(test.AssertPromMetrics(assert, assertMetrics, objectStorageBind), "cannot assert prom metrics")
+	prom.ResetAppCatMetric()
 
-		for key, expectedQuantity := range expectedQuantities {
-			fact, err := ts.getFact(ctx, tx, ts.billingDate, dt, key)
-			assert.NoError(err, key)
-			if expectedQuantity == 0 {
-				assert.Nil(fact, "fact found but expectedQuantity was zero")
-			} else {
-				assert.NotNil(fact, key)
-				assert.Equal(expectedQuantity, fact.Quantity, key)
-			}
-		}
-		return nil
-	}))
-}
-
-func (ts *ObjectStorageTestSuite) getFact(ctx context.Context, tx *sqlx.Tx, date time.Time, dt *db.DateTime, src AccumulateKey) (*db.Fact, error) {
-	record := reporting.Record{
-		TenantSource:   src.Tenant,
-		CategorySource: src.Zone + ":" + src.Namespace,
-		BillingDate:    date,
-		ProductSource:  src.String(),
-		DiscountSource: src.String(),
-		QueryName:      src.Query + ":" + src.Zone,
+	// This test simulates exporting the metrics from 06:00 for the rest of the day
+	// For that we'll have to divide the values by 18 to match up.
+	for i := range assertMetrics {
+		assertMetrics[i].Value = assertMetrics[i].Value / float64(18)
 	}
-	return test.FactByRecord(ctx, tx, dt, record)
+	assert.NoError(Export(metrics, 6))
+	assert.NoError(test.AssertPromMetrics(assert, assertMetrics, objectStorageBind), "cannot assert prom metrics")
+	prom.ResetAppCatMetric()
 }
 
 func (ts *ObjectStorageTestSuite) ensureBuckets(nameNsMap map[string]string) {
@@ -182,11 +145,7 @@ func (ts *ObjectStorageTestSuite) setupObjectStorage() (*ObjectStorage, func()) 
 		ts.T().Log("no API token provided")
 	}
 
-	location, err := time.LoadLocation("Europe/Zurich")
-	assert.NoError(err)
-
-	ts.billingDate = time.Date(2023, 1, 11, 0, 0, 0, 0, location)
-	o, err := NewObjectStorage(c, ts.Client, ts.DatabaseURL, ts.billingDate)
+	o, err := NewObjectStorage(c, ts.Client, "")
 	assert.NoError(err)
 
 	return o, cancel

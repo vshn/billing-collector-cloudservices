@@ -97,8 +97,8 @@ github.com/evanphx/json-patch v0.5.2/go.mod h1:ZWS5hhDbVDyob71nXKNL0+PWn6ToqBHMi
 github.com/evanphx/json-patch v4.12.0+incompatible h1:4onqiflcdA9EOZ4RxV643DvftH5pOlLGNtQ5lPWQu84=
 github.com/evanphx/json-patch/v5 v5.6.0 h1:b91NhWfaz02IuVxO9faSllyAtNXHMPkC5J8sJCLunww=
 github.com/evanphx/json-patch/v5 v5.6.0/go.mod h1:G79N1coSVB93tBe7j6PhzjmR3/2VvlbKOFpnXhI9Bw4=
-github.com/exoscale/egoscale v0.90.1 h1:G/Uyz3Yjdvo3H2oOFS5DhnzEZARLh77IhN58xHHFOpI=
-github.com/exoscale/egoscale v0.90.1/go.mod h1:NDhQbdGNKwnLVC2YGTB6ds9WIPw+V5ckvEEV8ho7pFE=
+github.com/exoscale/egoscale v0.100.1 h1:iXsV1Ei7daqe/6FYSCSDyrFs1iUG1l1X9qNh2uMw6z0=
+github.com/exoscale/egoscale v0.100.1/go.mod h1:BAb9p4rmyU+Wl400CJZO5270H2sXtdsZjLcm5xMKkz4=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/fatih/color v1.13.0 h1:8LOYc1KYPPmyKMuN8QV2DNRWNbLo6LZ0iLs8+mlH53w=
 github.com/flowstack/go-jsonschema v0.1.1/go.mod h1:yL7fNggx1o8rm9RlgXv7hTBWxdBM0rVwpMwimd3F3N0=
