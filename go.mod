@@ -6,13 +6,13 @@ require (
 	github.com/appuio/appuio-cloud-reporting v0.10.0
 	github.com/appuio/control-api v0.31.0
 	github.com/cloudscale-ch/cloudscale-go-sdk/v2 v2.1.0
-	github.com/exoscale/egoscale v0.90.1
+	github.com/exoscale/egoscale v0.100.1
 	github.com/go-logr/logr v1.3.0
 	github.com/go-logr/zapr v1.3.0
 	github.com/stretchr/testify v1.8.4
 	github.com/urfave/cli/v2 v2.24.4
 	github.com/vshn/provider-cloudscale v0.5.0
-	github.com/vshn/provider-exoscale v0.8.1
+	github.com/vshn/provider-exoscale v0.10.4
 	go.uber.org/zap v1.26.0
 	golang.org/x/oauth2 v0.12.0
 	gopkg.in/dnaeon/go-vcr.v3 v3.1.2
