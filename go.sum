@@ -50,8 +50,8 @@ github.com/antlr/antlr4/runtime/Go/antlr/v4 v4.0.0-20230305170008-8188dc5388df h
 github.com/antlr/antlr4/runtime/Go/antlr/v4 v4.0.0-20230305170008-8188dc5388df/go.mod h1:pSwJ0fSY5KhvocuWSx4fz3BA8OrA1bQn+K1Eli3BRwM=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0 h1:axGnT1gRIfimI7gJifB699GoE/oq+F2MU7Dml6nw9rQ=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=
-github.com/appuio/appuio-cloud-reporting v0.10.0 h1:4n9XVlCr5oHfnrg8F8KHueAO+/+Qh+Hb1GIzyTgb8WE=
-github.com/appuio/appuio-cloud-reporting v0.10.0/go.mod h1:3UppRODpaAHvfJwMEnkYENNXkVxWCptBMbk1Jw3qHww=
+github.com/appuio/appuio-cloud-reporting v0.17.0 h1:y4yf/rVp49xzfISPZwUsBSjRLpyPt8KZYssueXaCsz4=
+github.com/appuio/appuio-cloud-reporting v0.17.0/go.mod h1:3UppRODpaAHvfJwMEnkYENNXkVxWCptBMbk1Jw3qHww=
 github.com/appuio/control-api v0.31.0 h1:zgWtVw1uhQbnkbrqg+0g4yFrcn/6+yLcfgjknZhhb/Q=
 github.com/appuio/control-api v0.31.0/go.mod h1:Nvy0YcOw9PuQ+uFMWqWH0j3t47ckkPE+IeR8Fz/oAjU=
 github.com/asaskevich/govalidator v0.0.0-20190424111038-f61b66f89f4a h1:idn718Q4B6AGu/h5Sxe66HYVdqdGu2l9Iebqhi/AEoA=
