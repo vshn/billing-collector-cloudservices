@@ -10,7 +10,7 @@ require (
 	github.com/go-logr/logr v1.3.0
 	github.com/go-logr/zapr v1.3.0
 	github.com/stretchr/testify v1.8.4
-	github.com/urfave/cli/v2 v2.24.4
+	github.com/urfave/cli/v2 v2.27.1
 	github.com/vshn/provider-cloudscale v0.5.0
 	github.com/vshn/provider-exoscale v0.8.1
 	go.uber.org/zap v1.26.0
