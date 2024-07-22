@@ -3,7 +3,7 @@ module github.com/vshn/billing-collector-cloudservices
 go 1.21
 
 require (
-	github.com/appuio/appuio-cloud-reporting v0.10.0
+	github.com/appuio/appuio-cloud-reporting v0.17.0
 	github.com/appuio/control-api v0.31.0
 	github.com/cloudscale-ch/cloudscale-go-sdk/v2 v2.1.0
 	github.com/exoscale/egoscale v0.90.1
