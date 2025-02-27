@@ -3,8 +3,19 @@ package exoscale
 import (
 	"encoding/base64"
 	"fmt"
+	egoscale "github.com/exoscale/egoscale/v3"
 	"strings"
 )
+
+var Endpoints []egoscale.Endpoint = []egoscale.Endpoint{
+	egoscale.CHGva2,
+	egoscale.CHDk2,
+	egoscale.DEFra1,
+	egoscale.DEMuc1,
+	egoscale.ATVie1,
+	egoscale.ATVie2,
+	egoscale.BGSof1,
+}
 
 const (
 	// namespaceLabel represents the label used for namespace when fetching the metrics

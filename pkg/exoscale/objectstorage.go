@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	egoscale "github.com/exoscale/egoscale/v2"
-	"github.com/exoscale/egoscale/v2/oapi"
+	egoscale "github.com/exoscale/egoscale/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vshn/billing-collector-cloudservices/pkg/controlAPI"
 	"github.com/vshn/billing-collector-cloudservices/pkg/exofixtures"
@@ -75,7 +74,7 @@ func (o *ObjectStorage) getBucketUsage(ctx context.Context, bucketDetails []Buck
 	logger := log.Logger(ctx)
 	logger.Info("Fetching bucket usage from Exoscale")
 
-	resp, err := o.exoscaleClient.ListSosBucketsUsageWithResponse(ctx)
+	resp, err := o.exoscaleClient.ListSOSBucketsUsage(ctx)
 	if err != nil {
 		o.providerMetrics["providerFailed"].Inc()
 		return nil, err
@@ -83,7 +82,7 @@ func (o *ObjectStorage) getBucketUsage(ctx context.Context, bucketDetails []Buck
 		o.providerMetrics["providerSucceeded"].Inc()
 	}
 
-	odooMetrics, err := o.getOdooMeteredBillingRecords(ctx, *resp.JSON200.SosBucketsUsage, bucketDetails)
+	odooMetrics, err := o.getOdooMeteredBillingRecords(ctx, resp.SOSBucketsUsage, bucketDetails)
 	if err != nil {
 		return nil, err
 	}
@@ -95,13 +94,13 @@ func (o *ObjectStorage) getBucketUsage(ctx context.Context, bucketDetails []Buck
 	return odooMetrics, nil
 }
 
-func (o *ObjectStorage) getOdooMeteredBillingRecords(ctx context.Context, sosBucketsUsage []oapi.SosBucketUsage, bucketDetails []BucketDetail) ([]odoo.OdooMeteredBillingRecord, error) {
+func (o *ObjectStorage) getOdooMeteredBillingRecords(ctx context.Context, sosBucketsUsage []egoscale.SOSBucketUsage, bucketDetails []BucketDetail) ([]odoo.OdooMeteredBillingRecord, error) {
 	logger := log.Logger(ctx)
 	logger.Info("Aggregating buckets by namespace")
 
-	sosBucketsUsageMap := make(map[string]oapi.SosBucketUsage, len(sosBucketsUsage))
+	sosBucketsUsageMap := make(map[string]egoscale.SOSBucketUsage, len(sosBucketsUsage))
 	for _, usage := range sosBucketsUsage {
-		sosBucketsUsageMap[*usage.Name] = usage
+		sosBucketsUsageMap[usage.Name] = usage
 	}
 
 	location, err := time.LoadLocation("Europe/Zurich")
@@ -118,7 +117,7 @@ func (o *ObjectStorage) getOdooMeteredBillingRecords(ctx context.Context, sosBuc
 
 		if bucketUsage, exists := sosBucketsUsageMap[bucketDetail.BucketName]; exists {
 			logger.V(1).Info("Found exoscale bucket usage", "bucket", bucketUsage.Name, "bucket size", bucketUsage.Name)
-			value, err := adjustStorageSizeUnit(float64(*bucketUsage.Size))
+			value, err := adjustStorageSizeUnit(float64(bucketUsage.Size))
 			if err != nil {
 				return nil, err
 			}
