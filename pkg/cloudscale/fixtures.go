@@ -10,12 +10,6 @@ const (
 	productIdQueryRequests = "appcat-cloudscale-objectstorage-requests"
 )
 
-var (
-	// SourceZone represents the zone of the bucket, not of the cluster where the request for the bucket originated.
-	// All the zones we use here must be known to the appuio-odoo-adapter as well.
-	sourceZones = []string{"cloudscale"}
-)
-
 var units = map[string]string{
 	productIdStorage:       odoo.GBDay,
 	productIdTrafficOut:    odoo.GB,

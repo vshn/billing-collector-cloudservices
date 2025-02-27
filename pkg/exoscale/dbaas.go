@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	egoscale "github.com/exoscale/egoscale/v2"
+	egoscale "github.com/exoscale/egoscale/v3"
 	"github.com/vshn/billing-collector-cloudservices/pkg/controlAPI"
 	"github.com/vshn/billing-collector-cloudservices/pkg/kubernetes"
 	"github.com/vshn/billing-collector-cloudservices/pkg/log"
@@ -165,31 +165,31 @@ func findDBaaSDetailInNamespacesMap(ctx context.Context, resource metav1.Partial
 }
 
 // fetchDBaaSUsage gets DBaaS service usage from Exoscale
-func (ds *DBaaS) fetchDBaaSUsage(ctx context.Context) ([]*egoscale.DatabaseService, error) {
+func (ds *DBaaS) fetchDBaaSUsage(ctx context.Context) ([]egoscale.DBAASServiceCommon, error) {
 	logger := log.Logger(ctx)
 	logger.Info("Fetching DBaaS usage from Exoscale")
 
-	var databaseServices []*egoscale.DatabaseService
-	for _, zone := range Zones {
-		databaseServicesByZone, err := ds.exoscaleClient.ListDatabaseServices(ctx, zone)
+	var databaseServices []egoscale.DBAASServiceCommon
+	for _, endpoint := range Endpoints {
+		databaseServicesByZone, err := ds.exoscaleClient.WithEndpoint(endpoint).ListDBAASServices(ctx)
 		if err != nil {
-			logger.V(1).Error(err, "Cannot get exoscale database services on zone", "zone", zone)
+			logger.V(1).Error(err, "Cannot get exoscale database services on endpoint", "endpoint", endpoint)
 			return nil, err
 		}
-		databaseServices = append(databaseServices, databaseServicesByZone...)
+		databaseServices = append(databaseServices, databaseServicesByZone.DBAASServices...)
 	}
 	return databaseServices, nil
 }
 
 // AggregateDBaaS aggregates DBaaS services by namespaces and plan
-func (ds *DBaaS) AggregateDBaaS(ctx context.Context, exoscaleDBaaS []*egoscale.DatabaseService, dbaasDetails []Detail) ([]odoo.OdooMeteredBillingRecord, error) {
+func (ds *DBaaS) AggregateDBaaS(ctx context.Context, exoscaleDBaaS []egoscale.DBAASServiceCommon, dbaasDetails []Detail) ([]odoo.OdooMeteredBillingRecord, error) {
 	logger := log.Logger(ctx)
 	logger.Info("Aggregating DBaaS instances by namespace and plan")
 
 	// The DBaaS names are unique across DB types in an Exoscale organization.
-	dbaasServiceUsageMap := make(map[string]egoscale.DatabaseService, len(exoscaleDBaaS))
+	dbaasServiceUsageMap := make(map[string]egoscale.DBAASServiceCommon, len(exoscaleDBaaS))
 	for _, usage := range exoscaleDBaaS {
-		dbaasServiceUsageMap[*usage.Name] = *usage
+		dbaasServiceUsageMap[string(usage.Name)] = usage
 	}
 
 	location, err := time.LoadLocation("Europe/Zurich")
@@ -206,8 +206,8 @@ func (ds *DBaaS) AggregateDBaaS(ctx context.Context, exoscaleDBaaS []*egoscale.D
 		logger.V(1).Info("Checking DBaaS", "instance", dbaasDetail.DBName)
 
 		dbaasUsage, exists := dbaasServiceUsageMap[dbaasDetail.DBName]
-		if exists && dbaasDetail.Kind == groupVersionKinds[*dbaasUsage.Type].Kind {
-			logger.V(1).Info("Found exoscale dbaas usage", "instance", dbaasUsage.Name, "instance created", dbaasUsage.CreatedAt)
+		if exists && dbaasDetail.Kind == groupVersionKinds[string(dbaasUsage.Type)].Kind {
+			logger.V(1).Info("Found exoscale dbaas usage", "instance", dbaasUsage.Name, "instance created", dbaasUsage.CreatedAT)
 
 			itemGroup := fmt.Sprintf("APPUiO Managed - Cluster: %s / Namespace: %s", ds.clusterId, dbaasDetail.Namespace)
 			instanceId := fmt.Sprintf("%s/%s", dbaasDetail.Zone, dbaasDetail.DBName)
@@ -222,7 +222,7 @@ func (ds *DBaaS) AggregateDBaaS(ctx context.Context, exoscaleDBaaS []*egoscale.D
 			}
 
 			o := odoo.OdooMeteredBillingRecord{
-				ProductID:            productIdPrefix + fmt.Sprintf("-v2-%s-%s", *dbaasUsage.Type, *dbaasUsage.Plan),
+				ProductID:            productIdPrefix + fmt.Sprintf("-v2-%s-%s", string(dbaasUsage.Type), dbaasUsage.Plan),
 				InstanceID:           instanceId,
 				ItemDescription:      dbaasDetail.DBName,
 				ItemGroupDescription: itemGroup,

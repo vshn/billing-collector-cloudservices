@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	egoscale "github.com/exoscale/egoscale/v2"
+	egoscale "github.com/exoscale/egoscale/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/vshn/billing-collector-cloudservices/pkg/exofixtures"
 	"github.com/vshn/billing-collector-cloudservices/pkg/log"
@@ -49,7 +49,7 @@ func TestDBaaS_aggregatedDBaaS(t *testing.T) {
 
 	tests := map[string]struct {
 		dbaasDetails                  []Detail
-		exoscaleDBaaS                 []*egoscale.DatabaseService
+		exoscaleDBaaS                 []egoscale.DBAASServiceCommon
 		expectedAggregatedOdooRecords []odoo.OdooMeteredBillingRecord
 	}{
 		"given DBaaS details and Exoscale DBaasS, we should get the ExpectedAggregatedDBaasS": {
@@ -69,16 +69,16 @@ func TestDBaaS_aggregatedDBaaS(t *testing.T) {
 					Kind:         "PostgreSQLList",
 				},
 			},
-			exoscaleDBaaS: []*egoscale.DatabaseService{
+			exoscaleDBaaS: []egoscale.DBAASServiceCommon{
 				{
-					Name: strToPointer("postgres-abc"),
-					Type: strToPointer(string(exofixtures.PostgresDBaaSType)),
-					Plan: strToPointer("hobbyist-2"),
+					Name: "postgres-abc",
+					Type: egoscale.DBAASServiceTypeName(exofixtures.PostgresDBaaSType),
+					Plan: "hobbyist-2",
 				},
 				{
-					Name: strToPointer("postgres-def"),
-					Type: strToPointer(string(exofixtures.PostgresDBaaSType)),
-					Plan: strToPointer("business-128"),
+					Name: "postgres-def",
+					Type: egoscale.DBAASServiceTypeName(exofixtures.PostgresDBaaSType),
+					Plan: "business-128",
 				},
 			},
 			expectedAggregatedOdooRecords: expectedAggregatedOdooRecords,
@@ -100,14 +100,14 @@ func TestDBaaS_aggregatedDBaaS(t *testing.T) {
 					Kind:         "PostgreSQLList",
 				},
 			},
-			exoscaleDBaaS: []*egoscale.DatabaseService{
+			exoscaleDBaaS: []egoscale.DBAASServiceCommon{
 				{
-					Name: strToPointer("postgres-123"),
-					Type: strToPointer(string(exofixtures.PostgresDBaaSType)),
+					Name: "postgres-123",
+					Type: egoscale.DBAASServiceTypeName(exofixtures.PostgresDBaaSType),
 				},
 				{
-					Name: strToPointer("postgres-456"),
-					Type: strToPointer(string(exofixtures.PostgresDBaaSType)),
+					Name: "postgres-456",
+					Type: egoscale.DBAASServiceTypeName(exofixtures.PostgresDBaaSType),
 				},
 			},
 
@@ -123,10 +123,6 @@ func TestDBaaS_aggregatedDBaaS(t *testing.T) {
 			assert.Equal(t, tc.expectedAggregatedOdooRecords, aggregatedOdooRecords)
 		})
 	}
-}
-
-func strToPointer(s string) *string {
-	return &s
 }
 
 func getTestContext(t assert.TestingT) context.Context {
