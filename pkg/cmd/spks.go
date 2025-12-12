@@ -219,9 +219,7 @@ func QueryPrometheus(ctx context.Context, v1api v1.API, query string, logger log
 	case model.ValVector:
 		vectorVal := result.(model.Vector)
 		if len(vectorVal) != 1 {
-			logger.Error(err, "Result vector length is not 1, prometheus query failed and returned: ", "result", vectorVal)
-			providerMetrics["providerFailed"].Inc()
-			return -1, err
+			return 0, nil
 		}
 	default:
 		logger.Error(err, "result type is not Vector: ", "result", result)
