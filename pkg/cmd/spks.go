@@ -18,13 +18,13 @@ import (
 
 var (
 	prometheusQueryArr = [2]string{
-		"count(max_over_time(crossplane_resource_info{kind=\"compositemariadbinstances\", service_level=\"%s\"}[1d:1d]))",
-		"count(max_over_time(crossplane_resource_info{kind=\"compositeredisinstances\", service_level=\"%s\"}[1d:1d]))",
+		"count(max by(name)(max_over_time(crossplane_resource_info{kind=\"compositemariadbinstances\", service_level=\"%s\"}[1d:1d])))",
+		"count(max by(name)(max_over_time(crossplane_resource_info{kind=\"compositeredisinstances\", service_level=\"%s\"}[1d:1d])))",
 	}
 
 	odooURL           string
 	odooOauthTokenURL string
-	odooClientId      string
+	odooClientID      string
 	odooClientSecret  string
 	salesOrder        string
 	prometheusURL     string
@@ -46,7 +46,7 @@ func SpksCMD(allMetrics map[string]map[string]prometheus.Counter, ctx context.Co
 			&cli.StringFlag{Name: "odoo-oauth-token-url", Usage: "Oauth Token URL to authenticate with Odoo metered billing API",
 				EnvVars: []string{"ODOO_OAUTH_TOKEN_URL"}, Destination: &odooOauthTokenURL, Required: true, DefaultText: defaultTextForRequiredFlags},
 			&cli.StringFlag{Name: "odoo-oauth-client-id", Usage: "Client ID of the oauth client to interact with Odoo metered billing API",
-				EnvVars: []string{"ODOO_OAUTH_CLIENT_ID"}, Destination: &odooClientId, Required: true, DefaultText: defaultTextForRequiredFlags},
+				EnvVars: []string{"ODOO_OAUTH_CLIENT_ID"}, Destination: &odooClientID, Required: true, DefaultText: defaultTextForRequiredFlags},
 			&cli.StringFlag{Name: "odoo-oauth-client-secret", Usage: "Client secret of the oauth client to interact with Odoo metered billing API",
 				EnvVars: []string{"ODOO_OAUTH_CLIENT_SECRET"}, Destination: &odooClientSecret, Required: true, DefaultText: defaultTextForRequiredFlags},
 			&cli.StringFlag{Name: "sales-order", Usage: "Sales order to report billing data to",
@@ -112,7 +112,7 @@ func runSPKSBilling(logger logr.Logger, allMetrics map[string]map[string]prometh
 
 	logger.Info("Running SPKS billing with such timeranges: ", "startOfToday", startOfToday, "startYesterdayAbsolute", startYesterdayAbsolute.Local(), "endYesterdayAbsolute", endYesterdayAbsolute.Local())
 
-	odooClient := odoo.NewOdooAPIClient(c, odooURL, odooOauthTokenURL, odooClientId, odooClientSecret, logger, allMetrics["odooMetrics"])
+	odooClient := odoo.NewOdooAPIClient(c, odooURL, odooOauthTokenURL, odooClientID, odooClientSecret, logger, allMetrics["odooMetrics"])
 
 	mariadb, redis, err := getDatabasesCounts(logger, startOfToday, allMetrics)
 	if err != nil {
