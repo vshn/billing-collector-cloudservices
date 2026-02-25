@@ -9,7 +9,7 @@ require (
 	github.com/appuio/control-api v0.31.0
 	github.com/cloudscale-ch/cloudscale-go-sdk/v2 v2.1.0
 	github.com/exoscale/egoscale/v3 v3.1.8
-	github.com/go-logr/logr v1.4.2
+	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/zapr v1.3.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/common v0.62.0
