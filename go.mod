@@ -17,7 +17,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.5
 	github.com/vshn/provider-cloudscale v0.5.3
 	github.com/vshn/provider-exoscale v1.0.0
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.27.0
 	gopkg.in/dnaeon/go-vcr.v3 v3.1.2
 	k8s.io/api v0.32.1
