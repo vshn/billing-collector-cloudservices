@@ -2,7 +2,7 @@ module github.com/vshn/billing-collector-cloudservices
 
 go 1.23.0
 
-toolchain go1.23.4
+toolchain go1.27.1
 
 require (
 	github.com/appuio/appuio-cloud-reporting v0.10.0
