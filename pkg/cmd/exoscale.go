@@ -35,11 +35,8 @@ func ExoscaleCmds(allMetrics map[string]map[string]prometheus.Counter) *cli.Comm
 		clusterId         string
 		cloudZone         string
 		uom               string
-		// For dbaas in minutes
-		// For objectstorage in hours
-		// TODO: Fix this mess
-		collectInterval int
-		billingHour     int
+		collectInterval   int
+		billingHour       int
 	)
 	return &cli.Command{
 		Name:  "exoscale",
@@ -150,83 +147,6 @@ func ExoscaleCmds(allMetrics map[string]map[string]prometheus.Counter) *cli.Comm
 								time.Sleep(time.Hour * time.Duration(collectInterval))
 							}
 							time.Sleep(time.Hour)
-						}
-					}()
-
-					wg.Wait()
-					os.Exit(1)
-					return nil
-				},
-			},
-			{
-				Name:   "dbaas",
-				Usage:  "Get metrics from database service",
-				Before: addCommandName,
-				Action: func(c *cli.Context) error {
-					logger := log.Logger(c.Context)
-
-					var wg sync.WaitGroup
-					logger.Info("Creating Exoscale client")
-					exoscaleClient, err := exoscale.NewClient(accessKey, secret)
-					if err != nil {
-						return fmt.Errorf("exoscale client: %w", err)
-					}
-
-					logger.Info("Checking UOM mappings")
-					mapping, err := odoo.LoadUOM(uom)
-					if err != nil {
-						return err
-					}
-					err = exoscale.CheckDBaaSUOMExistence(mapping)
-					if err != nil {
-						return err
-					}
-
-					logger.Info("Creating k8s client")
-					k8sClient, err := kubernetes.NewClient(kubeconfig, "", "")
-					if err != nil {
-						return fmt.Errorf("k8s client: %w", err)
-					}
-
-					k8sControlClient, err := kubernetes.NewClient("", controlApiUrl, controlApiToken)
-					if err != nil {
-						return fmt.Errorf("k8s control client: %w", err)
-					}
-
-					odooClient := odoo.NewOdooAPIClient(c.Context, odooURL, odooOauthTokenURL, odooClientId, odooClientSecret, logger, allMetrics["odooMetrics"])
-
-					if collectInterval < 1 || collectInterval > 24 {
-						// Set to run once a day after billingHour in case the collectInterval is out of boundaries
-						collectInterval = 1
-					}
-
-					d, err := exoscale.NewDBaaS(exoscaleClient, k8sClient, k8sControlClient, collectInterval, salesOrder, clusterId, cloudZone, mapping)
-					if err != nil {
-						return fmt.Errorf("dbaas service: %w", err)
-					}
-
-					wg.Add(1)
-					go func() {
-						for {
-							logger.Info("Collecting DBaaS metrics")
-							metrics, err := d.GetMetrics(c.Context)
-							if err != nil {
-								logger.Error(err, "cannot execute dbaas collector")
-								wg.Done()
-							}
-
-							if len(metrics) == 0 {
-								logger.Info("No data to export to odoo", "time", time.Now())
-								time.Sleep(time.Minute * time.Duration(collectInterval))
-								continue
-							}
-
-							logger.Info("Exporting data to Odoo", "time", time.Now())
-							err = odooClient.SendData(metrics)
-							if err != nil {
-								logger.Error(err, "cannot export metrics")
-							}
-							time.Sleep(time.Minute * time.Duration(collectInterval))
 						}
 					}()
 

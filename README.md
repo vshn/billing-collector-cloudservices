@@ -48,35 +48,33 @@ $ make build
 
 Then, run one of the available commands:
 
-* Exoscale DBaaS:
+* Exoscale Object Storage:
 ```
-$ ./billing-collector-cloudservices exoscale dbaas
+$ ./billing-collector-cloudservices exoscale objectstorage
 ```
 
 ### Create Resources in Lab Cluster to test metrics collector
 
-You can first connect to your cluster and then create a claim for Postgres Database by applying a claim, for example:
+You can first connect to your cluster and then create an ObjectBucket claim, for example:
 
 ```
 apiVersion: appcat.vshn.io/v1
-kind: ExoscalePostgreSQL
+kind: ObjectBucket
 metadata:
   namespace: default
-  name: exoscale-postgres-lab-test-1
+  name: exoscale-bucket-lab-test-1
 spec:
   parameters:
-    size:
-      plan: hobbyist-2
+    bucketName: exoscale-bucket-lab-test-1
+    region: ch-gva-2
   writeConnectionSecretToRef:
-    name: postgres-connection-details
+    name: bucket-connection-details
 ```
 
-Once the database is created and `Ready`, you can run locally the command with the required env variables:
+Once the bucket is created and `Ready`, you can run locally the command with the required env variables:
 ```
-$ ./billing-collector-cloudservices exoscale dbaas
+$ ./billing-collector-cloudservices exoscale objectstorage
 ```
-
-The same works for other resources. Just apply the right claim and run the proper command.
 
 And don't forget to delete the resource(s) you created once you're done testing.
 
@@ -84,7 +82,7 @@ And don't forget to delete the resource(s) you created once you're done testing.
 
 You can get your Exoscale API key and secret from the Exoscale web UI. Be sure to select the correct project.
 
-The token should be restricted to the 'sos' and 'dbaas' services.
+The token should be restricted to the 'sos' service.
 
 ### Integration tests
 
