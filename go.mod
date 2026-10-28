@@ -6,7 +6,7 @@ require (
 	github.com/appuio/appuio-cloud-reporting v0.10.0
 	github.com/appuio/control-api v0.31.0
 	github.com/cloudscale-ch/cloudscale-go-sdk/v2 v2.1.0
-	github.com/exoscale/egoscale/v3 v3.1.8
+	github.com/exoscale/egoscale/v3 v3.1.62
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/prometheus/client_golang v1.20.5
@@ -52,6 +52,8 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
